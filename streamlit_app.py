@@ -61,8 +61,11 @@ def validate_api_key(api_key):
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(model_name="gemini-pro")
-        model.generate_content("Hello")
-        return True
+        response = model.generate_content("Hello")
+        # Ensure we got a valid response
+        if hasattr(response, 'text'):
+            return True
+        return False
     except Exception:
         return False
 
@@ -71,6 +74,8 @@ if "api_key" not in st.session_state:
     st.session_state.api_key = os.getenv("GEMINI_API_KEY", "")
 if "api_key_valid" not in st.session_state:
     st.session_state.api_key_valid = validate_api_key(st.session_state.api_key)
+if "api_key_checked" not in st.session_state:
+    st.session_state.api_key_checked = False
 
 # Initialize session state
 if "session_id" not in st.session_state:
@@ -110,9 +115,10 @@ with st.sidebar:
     )
     
     # Update API key if changed
-    if api_key_input != st.session_state.api_key:
+    if api_key_input != st.session_state.api_key or not st.session_state.api_key_checked:
         st.session_state.api_key = api_key_input
         st.session_state.api_key_valid = validate_api_key(st.session_state.api_key)
+        st.session_state.api_key_checked = True
         
         if st.session_state.api_key_valid:
             st.success("API key is valid!")
@@ -124,7 +130,7 @@ with st.sidebar:
                     "visualizer": DataVisualizationAnalyst(),
                     "storyteller": DataStoryteller()
                 }
-        else:
+        elif st.session_state.api_key:  # Only show error if key was provided but invalid
             st.error("Invalid API key or API service unavailable.")
     
     st.header("Upload Data")
@@ -216,10 +222,10 @@ else:
     
     if not AGENTS_AVAILABLE:
         st.warning("Agent functionality is unavailable because agent classes could not be imported.")
-    elif not st.session_state.api_key_valid:
-        st.warning("Please enter a valid Gemini API key to use the AI agents.")
     elif not GENAI_AVAILABLE:
         st.warning("AI agent functionality is disabled because the google.generativeai module could not be imported.")
+    elif not st.session_state.api_key_valid:
+        st.warning("Please enter a valid Gemini API key to use the AI agents.")
     else:
         # Agent selection
         agent_type = st.selectbox(
@@ -275,9 +281,11 @@ else:
     # Display chat history
     st.subheader("Conversation History")
     
-    # Check if API key is valid before showing chat interface
+    # Only show chat history or warning based on API key validity
     if not st.session_state.api_key_valid:
         st.warning("Please enter a valid Gemini API key to use the chat functionality.")
+    elif len(st.session_state.chat_history) == 0:
+        st.info("No conversation history yet. Start chatting with an agent above.")
     else:
         for message in st.session_state.chat_history:
             if message["role"] == "user":
